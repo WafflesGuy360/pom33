@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Oregon Trail</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+:root{--bg:#f1e4c3;--pn:#fff8e6;--tx:#3a2a14;--bd:#7a5a2e;--bt:#e8c77a;--gd:#2f7a2f;--bad:#a02020;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1710;--pn:#2b2216;--tx:#f0e2c2;--bd:#8a6a3a;--bt:#5a4524;--gd:#5cbf5c;--bad:#ff8a7a}}
+:root[data-theme="dark"]{--bg:#1d1710;--pn:#2b2216;--tx:#f0e2c2;--bd:#8a6a3a;--bt:#5a4524;--gd:#5cbf5c;--bad:#ff8a7a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:21px/1.3 "VT323","Courier New",monospace}
+#w{max-width:760px;margin:0 auto;padding:10px}
+h1{margin:6px 0;font:18px/1.4 "Press Start 2P","Courier New",monospace;letter-spacing:1px}
+canvas{width:100%;height:auto;border:4px solid var(--bd);border-radius:0;display:block;image-rendering:crisp-edges;image-rendering:pixelated;box-shadow:4px 4px 0 var(--bd)}
+#hud,#ui,#pty{background:var(--pn);border:4px solid var(--bd);border-radius:0;box-shadow:4px 4px 0 var(--bd);padding:8px 12px;margin-top:10px}
+#hud div{margin:2px 0;font-size:19px}
+#pty{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;font-size:18px}
+#pty:empty{display:none}
+.pp.dead{opacity:.45;text-decoration:line-through}
+.pp i{display:block;height:10px;background:rgba(128,128,128,.35);border:2px solid var(--bd);border-radius:0;overflow:hidden}
+.pp u{display:block;height:100%}
+button{font:inherit;background:var(--bt);color:var(--tx);border:3px solid var(--bd);border-radius:0;box-shadow:3px 3px 0 var(--bd);padding:5px 12px;margin:4px;cursor:pointer}
+button:hover{filter:brightness(1.12)}
+input{font:inherit;padding:4px;margin:6px 0;border:3px solid var(--bd);border-radius:0;background:var(--bg);color:var(--tx)}
+.lg{color:var(--bad);font-style:italic}
+.row{display:flex;align-items:center;gap:4px}.row span{flex:1}
+#ui p{margin:4px 0 8px}
+#pg{height:14px;border:4px solid var(--bd);background:var(--pn);margin-top:10px;box-shadow:4px 4px 0 var(--bd)}#pg u{display:block;height:100%;background:var(--gd);transition:width .3s}
+#mu{float:right;font-size:16px;margin:0}canvas{cursor:crosshair}
+@keyframes sk{25%{transform:translate(-6px,3px)}75%{transform:translate(6px,-3px)}}.sk{animation:sk .3s}
+#ui{counter-reset:b}#ui>button{counter-increment:b}#ui>button::before{content:counter(b) ". ";opacity:.6}
+</style></head><body>
+<div id="w"><h1>🐂 The Oregon Trail <button id="mu" title="Sound on/off">🔊</button></h1>
+<canvas id="c" width="180" height="65"></canvas>
+<div id="pg"><u></u></div><div id="hud"></div><div id="pty"></div><div id="ui"></div></div>
+<script>
+const $=i=>document.getElementById(i),R=n=>Math.floor(Math.random()*n),pk=a=>a[R(a.length)],ch=p=>Math.random()<p;
+const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],PN=["Steady","Strenuous","Grueling"],RN=["Filling","Meager","Bare bones"];
+const LM=[["Kansas River",102,"r"],["Big Blue River",185,"r"],["Fort Kearny",304,"f"],["Chimney Rock",554,"l"],["Fort Laramie",640,"f"],["Independence Rock",830,"l"],["South Pass",932,"l"],["Fort Bridger",989,"f"],["Soda Springs",1151,"l"],["Fort Hall",1288,"f"],["Snake River",1451,"r"],["Fort Boise",1534,"f"],["The Blue Mountains",1648,"l"],["Fort Walla Walla",1736,"f"],["The Dalles",1800,"d"]];
+const END=2600,U={food:50,ammo:1,clothes:1,parts:1,med:1,ox:1},PR={food:10,ammo:4,clothes:10,parts:12,med:8,ox:30};
+const NM={food:"lb of food",ammo:"boxes of ammo",clothes:"sets of clothes",parts:"spare parts",med:"doses of medicine",ox:"oxen"};
+const WS={snow:.55,thunderstorm:.6,rain:.8,fog:.85,freezing:.8,windy:.9,"very hot":.8,hot:.9};
+const DIS=[["dysentery",9],["cholera",13],["typhoid",8],["measles",6],["a fever",5],["snakebite",10],["exhaustion",5],["mountain fever",7],["scurvy",5],["a broken arm",4],["a broken leg",7],["an infected wound",8],["food poisoning",5],["a bad cough",4],["frostbite",7],["heat stroke",7]];
+let G,P=[],tr=0,fr=0;
+const A=()=>P.filter(p=>!p.x),lose=(k,n)=>{G[k]=Math.max(0,G[k]-n)},adv=n=>{for(let i=0;i<n;i++)day(1)};
+const fd=()=>MO[G.d.getMonth()]+" "+G.d.getDate()+", "+G.d.getFullYear();
+function newG(){G={mi:0,d:new Date(1848,2,1),food:0,ammo:0,clothes:0,parts:0,med:0,ox:0,money:0,pace:0,rat:0,w:"clear",T:60,run:0,nl:0,log:[],msg:"",ret:null,mult:1,at:0};P=[]}
+function hurt(p,n,c){if(p.x)return;p.h-=n;if(p.h<=0){p.h=0;p.x=1;G.log.push(`${p.n} has died of ${c||p.ill||"exhaustion"}.`)}}
+function wx(){const m=G.d.getMonth(),h=G.mi>1950||(G.mi>1150&&G.mi<1300),r=Math.random(),T=[22,28,40,52,62,72,80,78,66,52,36,26][m]-(h?10:0)+R(16)-8;G.T=T;G.w=T<28?(r<.5?"snow":"freezing"):r<.12?"rain":r<.18?"thunderstorm":r<.25?"fog":T>88?"very hot":T>75&&r<.6?"hot":pk(["clear","clear","clear","cool","windy","cloudy"])}
+function day(rest){const a=A(),n=a.length;G.d.setDate(G.d.getDate()+1);wx();
+ if(!rest)G.mi+=Math.max(0,[11,15,20][G.pace]*Math.min(1,G.ox/4)*(WS[G.w]||1))+R(4);
+ G.food-=Math.ceil([2.4,1.8,1.3][G.rat]*n);let st=0;if(G.food<0){G.food=0;st=1}
+ a.forEach(p=>{const d=[1,0,-2][G.rat]+(rest?3:[0,-1,-3][G.pace])-(p.ill?Math.ceil(p.sv/2):0)-(G.T<35&&G.clothes<n?2:0)-(G.T>90?1:0)-(st?5:0);
+  if(d<0)hurt(p,-d,st?"starvation":p.ill||(G.T<35?"exposure":"exhaustion"));else p.h=Math.min(100,p.h+d);
+  if(p.ill&&!p.x&&--p.t<=0){G.log.push(p.n+" has recovered from "+p.ill+".");p.ill=0;p.sv=0}})}
+function hud(){const g=G,l=LM[g.nl];$('hud').innerHTML=`<div><b>${fd()}</b> · ${g.w}, ${g.T}°F</div><div>Miles to Oregon: <b>${Math.max(0,END-Math.floor(g.mi))}</b> · Next stop: ${l?l[0]+" ("+(l[1]-Math.floor(g.mi))+" mi)":"the Willamette Valley"}</div><div>Food <b>${g.food}</b> lb (~${Math.floor(g.food/Math.max(1,cn()))} days) · Oxen <b>${g.ox}</b> · Ammo <b>${g.ammo}</b> · Clothes <b>${g.clothes}</b> · Parts <b>${g.parts}</b> · Medicine <b>${g.med}</b> · $<b>${g.money}</b></div><div>Pace: ${PN[g.pace]} · Rations: ${RN[g.rat]}</div>`;
+ $('pty').innerHTML=P.map(p=>`<div class="pp${p.x?" dead":""}"><span>${p.x?"✝ ":""}${p.n}${p.ill&&!p.x?" ("+p.ill+")":""}</span><i><u style="width:${p.h}%;background:${p.h>60?"var(--gd)":p.h>30?"#d08a1a":"var(--bad)"}"></u></i></div>`).join("")}
+function ask(t,o){G.run=0;if(P.length&&(P[0].x||!A().length))return over();hud();const l=G.log.splice(0).join(" "),u=$('ui');u.innerHTML=(l?`<p class="lg">${l}</p>`:"")+`<p>${t}</p>`;
+ o.forEach(([s,f])=>{const b=document.createElement('button');b.textContent=s;b.onclick=()=>{const r=f();if(r!=null)done(r)};u.appendChild(b)})}
+function done(t){ask(t,[["Continue",G.ret||go]])}
+function go(){G.run=1;G.msg="";G.ret=null;G.at=0;const u=$('ui');u.innerHTML="<p>The wagon rolls westward…</p>";const b=document.createElement('button');b.textContent="Stop the wagon / manage supplies";b.onclick=()=>{G.run=0;menu()};u.appendChild(b)}
+function menu(x){x=x||[];G.run=0;G.ret=()=>menu(x);ask(G.msg||"The wagon is stopped. What would you like to do?",[["Continue traveling",go],["Rest 2 days",()=>{adv(2);menu(x)}],["Hunt (1 day)",hunt],["Pace: "+PN[G.pace]+" ›",()=>{G.pace=(G.pace+1)%3;menu(x)}],["Rations: "+RN[G.rat]+" ›",()=>{G.rat=(G.rat+1)%3;menu(x)}],...x])}
+function over(w){G.run=0;hud();const l=G.log.splice(0).join(" ");$('ui').innerHTML=`<p class="lg">${l}</p><p><b>Your journey ends here.</b> ${w||(P[0].x?"Wagon leader "+P[0].n+" has perished.":"Everyone has died.")} You traveled ${Math.floor(G.mi)} of 2,600 miles. Tombstone: <i>“Here lies ${P[0].n}. Died on the trail, ${fd()}.”</i></p>`;ag()}
+function ag(){const b=document.createElement('button');b.textContent="Start a new journey";b.onclick=intro;$('ui').appendChild(b)}
+function win(m){G.run=0;if(P[0].x||!A().length)return over();const a=A(),s=Math.round((a.length*100+a.reduce((t,p)=>t+p.h,0)/2+G.food/5+G.ox*10+G.clothes*5+G.parts*5+G.med*3+G.ammo*2+G.money/5)*G.mult);hud();const l=G.log.splice(0).join(" ");$('ui').innerHTML=`<p class="lg">${l}</p><p><b>🎉 You made it to Oregon!</b> ${m||""} You arrived on ${fd()} with ${a.length} of ${P.length} family members alive. Final score: <b>${s}</b>.</p>`;ag()}
+function intro(){newG();ask(`<b>THE OREGON TRAIL — 1848</b><br>You will lead a party of five (more may join along the way) 2,600 miles from Independence, Missouri to Oregon’s Willamette Valley. Choose names for your wagon leader and four companions. Leave a companion name blank to use a random name.<br><label for="nm">Wagon leader</label><br><input id="nm" value="Josiah" maxlength="14"><br><label for="comp1">Companion 1</label><br><input id="comp1" placeholder="Random name" maxlength="14"><br><label for="comp2">Companion 2</label><br><input id="comp2" placeholder="Random name" maxlength="14"><br><label for="comp3">Companion 3</label><br><input id="comp3" placeholder="Random name" maxlength="14"><br><label for="comp4">Companion 4</label><br><input id="comp4" placeholder="Random name" maxlength="14"><br>Choose a trade (poorer trades score higher):`,[["Banker — $1,100 (×1)",()=>pick(1100,1)],["Carpenter — $550 (×2)",()=>pick(550,2)],["Farmer — $280 (×3)",()=>pick(280,3)]])}
+function pick(m,x){const cleanName=(v,fallback)=>{const s=(v||"").trim().replace(/[<>&"]/g,"").slice(0,14);return s||fallback};const n=cleanName($('nm').value,"Josiah"),ns=["Sarah","Thomas","Eliza","William","Martha","Henry","Clara","Amos"].sort(()=>Math.random()-.5),companions=Array.from({length:psz()},(_,i)=>i+1).map((i)=>cleanName($('comp'+i).value,ns[i-1]));
+ P=[n,...companions].map(n=>({n,h:100,ill:0,sv:0,t:0}));G.money=m;G.mult=x;const H=["muddy, little grass","wet spring","the ideal time","dry and dusty","risk of mountain snow!"];
+ ask("When do you leave Independence?",[2,3,4,5,6].map(i=>[MO[i]+" 1 ("+H[i-2]+")",()=>{G.d=new Date(1848,i,1);shop(1,begin)}]))}
+function begin(){if(G.ox<2){shop(1,begin);$('ui').insertAdjacentHTML('afterbegin','<p class="lg">You need at least 2 oxen to pull a wagon!</p>');return}go()}
+function shop(m,after){
+ const c={},ks=Object.keys(U),prices={};
+ ks.forEach(k=>prices[k]=Math.round(PR[k]*m));
+ const u=$('ui');
+ G.run=0;hud();
+ u.innerHTML=`<p>The general store. You have $${G.money}. Type how many bundles or items you want to buy. Food is sold in 50-lb bundles.</p>`;
+ const rows={};
+ ks.forEach(k=>{
+  const d=document.createElement('div');d.className='row';
+  const label=document.createElement('span');
+  label.textContent=`${k==="food"?"50-lb food bundles":NM[k]} ($${prices[k]} each)`;
+  const input=document.createElement('input');input.type='number';input.min='0';input.step='1';input.value='0';input.inputMode='numeric';input.style.width='76px';input.setAttribute('aria-label',`Quantity of ${NM[k]} to buy`);
+  const stock=document.createElement('b');stock.textContent=String(G[k]);
+  input.addEventListener('input',()=>{
+   const n=Math.max(0,Math.floor(Number(input.value)||0));
+   c[k]=n;stock.textContent=String(G[k]+n*U[k]);updateTotal();
+  });
+  d.append(label,input,stock);u.appendChild(d);rows[k]={input,stock};
+ });
+ const summary=document.createElement('p');summary.id='shopSummary';u.appendChild(summary);
+ const b=document.createElement('button');b.textContent='Done shopping';b.onclick=()=>{
+  const cost=ks.reduce((sum,k)=>sum+(c[k]||0)*prices[k],0);
+  if(cost>G.money){summary.textContent=`You are $${cost-G.money} over budget. Lower some quantities to continue.`;return}
+  ks.forEach(k=>G[k]+=(c[k]||0)*U[k]);G.money-=cost;after();
+ };u.appendChild(b);
+ function updateTotal(){
+  const cost=ks.reduce((sum,k)=>sum+(c[k]||0)*prices[k],0);
+  summary.textContent=`Total: $${cost} · Money remaining: $${G.money-cost}`;
+  summary.style.color=cost>G.money?'#c44':'';
+ }
+ updateTotal();
+}
+function land(l){G.at=l[2];const n=l[0];if(l[2]=="r")return river(n,`You have reached the ${n}. `);if(l[2]=="d")return dalles("");
+ G.msg=`You have reached ${n}. `+(l[2]=="f"?"A trading post stands behind a log stockade. Prices rise the farther west you go. ":"")+(n=="Independence Rock"?(G.d.getMonth()<6||(G.d.getMonth()==6&&G.d.getDate()<=4)?"You’re ahead of the Fourth of July schedule!":"You’re behind schedule. Mountain snow is a real danger."):"");
+ const fx=l[2]=="f"?[["Visit the store",()=>shop(1+l[1]/900,()=>menu(fx))]]:[];menu(fx)}
+function swim(r){if(!ch(r/100))return "You cross safely.";const f=Math.round(G.food*(.2+Math.random()*.4));lose("food",f);lose("clothes",R(2));lose("ammo",R(2));if(ch(.4))lose("ox",1);A().forEach(p=>{if(ch(.1))hurt(p,100,"drowning")});return `Disaster! The wagon is swamped. You lose ${f} lb of food and other supplies.`}
+function river(n,pre){const d=2+R(7)+(/rain|thunder/.test(G.w)?2:0);ask(`${pre||""}The river is about ${d} feet deep and ${100+R(300)} feet wide. How will you cross? (Fording is only safe in shallow water; the ferry is safest.)`,[["Ford it",()=>swim(Math.max(4,Math.min(85,(d-2)*13)))],["Caulk the wagon and float it",()=>swim(8+d*3)],["Hire a ferry ($10, 1 day)",()=>{if(G.money<10){river(n,"You can’t afford the ferry! ");return}G.money-=10;adv(1);return swim(3)}],["Wait a day for the water to change",()=>{adv(1);river(n,"A day passes. ")}]])}
+function dalles(pre){ask(`${pre}You have reached The Dalles, the end of the wagon road. You can raft the wild Columbia River, or take the new Barlow Road over the mountains for a $25 toll.`,[["Raft the Columbia",()=>{let m="";for(let i=0;i<3;i++)if(ch(.28)){m+="Rapids toss the raft! ";lose("food",50+R(80));const p=pk(A());ch(.35)?hurt(p,100,"drowning"):hurt(p,25,"injuries")}G.mi=END;adv(4);win(m)}],["Take the Barlow Road ($25)",()=>{if(G.money<25){dalles("You can’t afford the toll! ");return}G.money-=25;G.mi=2351;return "You pay the toll and start up the steep, muddy road. Expect hardships."}]])}
+function sick(p,d,s){if(!p)return;p.ill=d;p.sv=s;p.t=4+R(6)}
+function sickEv(p,d,s){ask(`${p.n} has ${d}.`,[["Use medicine",()=>{if(!G.med){sick(p,d,s);return "You have no medicine! "+p.n+" suffers on."}G.med--;if(ch(.8))return p.n+" recovers quickly thanks to the medicine.";sick(p,d,s/2);return "The medicine helps only a little."}],["Rest 3 days",()=>{sick(p,d,s);adv(3);if(!p.x&&ch(.45)){p.ill=0;p.sv=0;return "Rest does the trick. "+p.n+" is on the mend."}return "Three days pass. "+p.n+" is still unwell."}],["Push on and pray",()=>{sick(p,d,s);return "You press on. "+p.n+" rides in the wagon bed, suffering."}]])}
+function hunt(){const a=pk([["buffalo",300],["deer",100],["antelope",80],["elk",180],["rabbits",14],["a black bear",160]]);ask(`You spot ${a[0]} near camp.`,[["Aim carefully (1 box)",()=>shot(a,1,.65)],["Blaze away (3 boxes)",()=>shot(a,3,.92)],["Let it go",()=>"You let it be."]])}
+function shot(a,b,p){if(G.ammo<b)return "You don’t have enough ammo.";G.ammo-=b;adv(1);if(!ch(p))return "You miss. It gets away.";const f=Math.min(200,Math.round(a[1]*(.7+Math.random()*.6)));G.food+=f;if(a[0].includes("bear")&&ch(.25)){hurt(pk(A()),20,"a mauling");return `You bring down the bear (+${f} lb) but it claws someone first.`}return `Success! You haul back ${f} lb of meat (all you can carry).`}
+const E=[
+{w:16,f(){const x=pk(DIS.filter(d=>!(d[0]=="frostbite"&&G.T>40)&&!(d[0]=="heat stroke"&&G.T<80)));sickEv(pk(A()),x[0],x[1])}},
+{w:10,f(){const x=pk(["wheel","axle","tongue"]);ask(`A ${x} on the wagon has cracked.`,[["Use a spare part",()=>{if(G.parts){G.parts--;return "You fit a spare. Good as new."}adv(3);return "No spares! You spend 3 days whittling a crude replacement."}],["Patch it by hand (2 days)",()=>{adv(2);if(ch(.6))return "The patch holds, for now.";adv(2);return "The patch fails. You lose two more days redoing it."}]])}},
+{w:7,ok:()=>G.ox>0,f(){ask(`One of your oxen ${pk(["went lame","collapsed from the heat","ate a poison weed","was bitten by a snake","broke a leg in a gopher hole"])}.`,[["Butcher it (+120 lb food)",()=>{lose("ox",1);G.food+=120;return "Fresh meat tonight."}],["Nurse it (2 days)",()=>{adv(2);if(ch(.55))return "The ox recovers.";lose("ox",1);return "It dies despite your care."}],["Leave it behind",()=>{lose("ox",1);return "You unyoke it and walk on."}]])}},
+{w:8,f(){const s=pk([["thunderstorm","food"],["hailstorm","clothes"],["dust storm","ammo"],["flash flood","food"],["blizzard","clothes"],["prairie fire","food"]]),n=s[0],k=s[1];ask(`A ${n} sweeps over the trail!`,[["Make camp and wait it out (2 days)",()=>{adv(2);return "You huddle in the wagon until the "+n+" passes."}],["Press on through it",()=>{if(ch(.5)){const q=k=="food"?60+R(80):1+R(2),p=pk(A());lose(k,q);hurt(p,12+R(15),"the "+n);return `The ${n} batters you: you lose ${q} ${NM[k]} and ${p.n} is hurt.`}return "You get through, battered but whole."}]])}},
+{w:4,f(){ask("You hear someone in the wagon at night: thieves!",[["Fire at them (1 box)",()=>{if(!G.ammo)return "No ammo! They take what they want.";lose("ammo",1);if(ch(.6))return "Your shot scares them off.";lose("food",80);return "They escape with 80 lb of food."}],["Let them go",()=>{const k=pk(["food","clothes","ammo","med"]),q=k=="food"?50+R(60):1;lose(k,q);return `They make off with ${q} ${NM[k]}.`}],["Chase them on foot (1 day)",()=>{adv(1);if(ch(.4)){G.money+=15;return "You recover the goods and a purse: +$15."}return "You lose them in the dark."}]])}},
+{w:7,f(){const ks=Object.keys(U),a=pk(ks),b=pk(ks.filter(k=>k!=a)),qb=1+R(2),qa=Math.max(1,Math.round(qb*PR[b]/PR[a]*(.6+Math.random()*.8))),tq=q=>{if(G[a]<q*U[a])return "You don’t have enough to trade.";G[a]-=q*U[a];G[b]+=qb*U[b];return "Deal done."};
+ ask(`${pk(["A trader","A weary emigrant","A fur trapper","A peddler"])} offers ${qb*U[b]} ${NM[b]} for ${qa*U[a]} ${NM[a]}.`,[["Accept",()=>tq(qa)],["Haggle",()=>ch(.5)?tq(Math.max(1,Math.floor(qa*.7))):"He shrugs and rides away."],["Decline",()=>"You wave him off."]])}},
+{w:4,f(){ask(`A party of ${pk(["Pawnee","Lakota","Shoshone","Cayuse","Bannock"])} travelers approaches peacefully, offering to trade.`,[["Trade a set of clothes for guidance",()=>{if(!G.clothes)return "You have nothing to trade.";lose("clothes",1);G.mi+=20;return "They show you a better route: +20 miles."}],["Share a meal (−30 lb food)",()=>{lose("food",30);G.med++;return "They thank you with healing herbs: +1 medicine."}],["Nod and move on",()=>"They watch you go."]])}},
+{w:5,f:hunt},
+{w:4,f(){ask(`You find ${pk(["wild berries","mushrooms","a patch of wild onions","a plum thicket","prickly pear"])} near the trail.`,[["Gather and eat",()=>{if(ch(.2)){const p=pk(A());sick(p,"food poisoning",5);return "Some are bad! "+p.n+" falls ill with food poisoning."}G.food+=40+R(40);return "A welcome treat: extra food for the wagon."}],["Don’t risk it",()=>"Better safe than sorry."]])}},
+{w:4,f(){ask("You find an abandoned wagon. A scrawled sign reads: “Cholera. Keep away.”",[["Search it (1 day)",()=>{adv(1);let m="";if(ch(.3)){const p=pk(A());sick(p,"cholera",12);m=p.n+" catches cholera! "}const k=pk(["food","ammo","clothes","parts","med"]),q=k=="food"?60+R(100):1+R(2);G[k]+=q;return m+`You salvage ${q} ${NM[k]}.`}],["Leave it be",()=>"You hurry past."]])}},
+{w:4,f(){ask(`You pass a lonely grave. The marker reads: “${pk(["Mary, aged 6. Gone too soon.","Jonas Hale, drowned at the river.","Baby Annie. We could not carry her farther.","Unknown traveler, died of cholera.","Samuel and Ruth, together at last."])}”`,[["Hold a short service (1 day)",()=>{adv(1);A().forEach(p=>p.h=Math.min(100,p.h+8));return "The party takes heart and rests."}],["Move on",()=>"You tip your hat and keep walking."]])}},
+{w:3,f(){ask("A local trapper offers to guide you along a shortcut for $10.",[["Pay and take it",()=>{if(G.money<10)return "You can’t afford it.";G.money-=10;if(ch(.65)){G.mi+=30;return "It works! You save 30 miles."}adv(3);return "He led you in circles. You lose three days."}],["Stay on the trail",()=>"You politely decline."]])}},
+{w:2,ok:()=>P.length<7,f(){const n=pk(["Tommy","Lucy","Eli","Hannah","Pete"]);ask(`A dying emigrant begs you to take his orphaned child, ${n}, to Oregon.`,[["Take the child in",()=>{P.push({n,h:70,ill:0,sv:0,t:0});return n+" joins your family. One more mouth to feed."}],["Refuse",()=>"You ride away, haunted by his plea."]])}},
+{w:3,f(){ask("A desperate family begs you for medicine for their feverish daughter.",[["Give them a dose",()=>{if(!G.med)return "You have none to give. They weep.";G.med--;if(ch(.6)){G.money+=20+R(30);return "She recovers! The family pays you what they can."}return "She is too far gone."}],["Refuse",()=>"You keep your supplies. It weighs on you."]])}},
+{w:3,ok:()=>G.ox>1,f(){ask("A buffalo herd stampedes toward your wagon!",[["Circle up and hold the team",()=>{if(ch(.6))return "The herd splits around you.";lose("ox",1);return "An ox bolts into the dust and is lost."}],["Flee downwind (1 day)",()=>{adv(1);lose("food",G.food>100?60:0);return "You escape, but lose a day and some goods."}]])}},
+{w:5,ok:()=>G.ox<4&&G.food>250,f(){ask("Your weakened team strains under the weight of the wagon.",[["Dump 200 lb of food",()=>{lose("food",200);return "The team pulls easier."}],["Go slowly (2 days)",()=>{adv(2);return "Slow going, but you keep everything."}]])}},
+{w:2,f(){ask("A campfire spark lights the wagon cover!",[["Beat out the flames",()=>{hurt(pk(A()),15,"burns");lose("clothes",1);return "You put it out, but at a cost."}],["Haul water from the river (1 day)",()=>{adv(1);if(ch(.5))return "Saved it all.";lose("food",100);return "You lose 100 lb of food to the blaze."}]])}},
+{w:2,ok:()=>A().length>1,f(){const p=pk(A().slice(1));ask(p.n+" wandered from camp and hasn’t returned.",[["Search for 2 days",()=>{adv(2);if(ch(.8))return p.n+" is found, shaken but safe.";hurt(p,100,"exposure");return "The search fails."}],["Wait one night",()=>{adv(1);if(ch(.5))return p.n+" stumbles back to camp.";hurt(p,100,"exposure");return "There is no sign of "+p.n+"."}]])}},
+{w:4,ok:()=>/rain|thunder|snow/.test(G.w),f(){ask("The wagon is bogged to the axles in mud.",[["Dig it out (1 day)",()=>{adv(1);return "Hard work, but it costs nothing."}],["Double the team and haul",()=>{if(ch(.5))return "It lurches free.";if(G.parts){G.parts--;return "A wheel cracks. You swap in a spare."}adv(2);return "A wheel cracks. You lose two days repairing it."}]])}},
+{w:2,f(){ask("A smooth-talking stranger invites you to a card game by the campfire.",[["Bet $20",()=>{if(G.money<20)return "You’re too poor to play.";if(ch(.42)){G.money+=20;return "You win $20!"}G.money-=20;return "You lose $20."}],["Politely decline",()=>"You keep your money, and your wits."]])}},
+{w:3,f(){ask(`${pk(["A rancher","A missionary","A trapper"])} offers supplies in exchange for a day’s help mending fences.`,[["Help (1 day)",()=>{adv(1);G.food+=80;G.money+=10;return "Honest work earns +80 lb of food and $10."}],["Decline",()=>"You can’t spare the time."]])}},
+{w:3,ok:()=>G.food>100,f(){ask("The heat has spoiled some of your stored food.",[["Sort through it (1 day)",()=>{adv(1);lose("food",30);return "You salvage most of it, losing 30 lb."}],["Ignore it",()=>{const q=Math.floor(G.food*.25);lose("food",q);return `You lose ${q} lb to rot.`}]])}},
+{w:3,ok:()=>G.ox>1,f(){ask("Wolves circle camp at night, eyeing the oxen.",[["Shoot at them (1 box)",()=>{if(!G.ammo){lose("ox",1);return "No ammo! A wolf drags off an ox."}lose("ammo",1);if(ch(.75))return "The wolves scatter.";lose("ox",1);return "You miss, and they take an ox."}],["Build up the fire and stay awake",()=>{hurt(pk(A()),8,"exhaustion");if(ch(.7))return "The fire holds them off, but nobody sleeps well.";lose("ox",1);return "They snatch an ox anyway."}]])}}
+];
+function ev(){const c=E.filter(e=>!e.ok||e.ok());let r=Math.random()*c.reduce((s,e)=>s+e.w,0);for(const e of c)if((r-=e.w)<0)return e.f()}
+setInterval(()=>{if(!G.run)return;day(0);hud();if(P[0].x||!A().length)return over();if(G.ox<=0)return over("Every ox is dead and you are stranded in the wilderness.");if(G.mi>=END)return win();if(G.food<=cn()*4&&!G.lw){G.lw=1;G.run=0;return lowFood()}if(G.food>cn()*8)G.lw=0;
+ const l=LM[G.nl];if(l&&G.mi>=l[1]){G.mi=l[1];G.nl++;G.run=0;land(l)}else if(Math.random()<[.33,.4,.47][G.pace]){G.run=0;ev()}},300);
+const cv=$('c'),g=cv.getContext('2d');
+const RG=[[650,"#6fae4f","#4e8a3a","#5a7a9a"],[1300,"#d2b068","#b89448","#9a7a5a"],[1900,"#a39a6a","#857c4e","#7a6f8a"],[2350,"#7da35a","#5c8444","#4f6f7a"],[9999,"#4d9a3f","#2f7a32","#3a6a5a"]];
+function draw(){const W=720,H=260,r=RG.find(x=>G.mi<x[0]),w=G.w,sn=w=="snow"||G.T<30;fr++;if(G.run)tr+=3;g.setTransform(.25,0,0,.25,0,0);g.imageSmoothingEnabled=false;
+ const sk=g.createLinearGradient(0,0,0,170),k=/rain|thunder|fog/.test(w)?["#5d6b78","#9aa8b3"]:sn?["#aab6c2","#dfe6ec"]:/hot/.test(w)?["#f0a45a","#ffe0a0"]:["#4aa8f0","#bfe6ff"];
+ g.fillStyle=k[1];g.fillRect(0,0,W,H);g.fillStyle=k[0];g.globalAlpha=.2;for(let i=0;i<5;i++)g.fillRect(0,0,W,170-i*34);g.globalAlpha=1;
+ if(w=="clear"||/hot/.test(w)){g.fillStyle="#fff3a0";g.beginPath();g.arc(600,50,26,0,7);g.fill()}
+ [[.1,70,r[3]],[.3,40,r[2]]].forEach(([s,a,c],j)=>{g.fillStyle=sn?"#e8eef4":c;g.beginPath();g.moveTo(0,172);for(let x=0;x<=W;x+=8){const u=x+tr*s;g.lineTo(x,150-a*(Math.sin(u/90+j*2)*.5+.5)-a*.3*Math.sin(u/31))}g.lineTo(W,172);g.fill()});
+ g.fillStyle=sn?"#f4f7fa":r[1];g.fillRect(0,170,W,H-170);g.fillStyle="#9a7b4f";g.fillRect(0,222,W,22);
+ g.strokeStyle=sn?"#c8d2da":r[2];g.lineWidth=4;for(let i=0;i<14;i++){const x=((i*97-tr*1.4)%W+W)%W,y=180+(i*23)%40;g.beginPath();g.moveTo(x,y);g.lineTo(x-3,y-8);g.moveTo(x,y);g.lineTo(x+3,y-8);g.stroke()}
+ const t=G.at;if(t=="f"){g.fillStyle="#7a5230";g.fillRect(500,150,130,70);for(let i=0;i<13;i++)g.fillRect(500+i*10,142,6,10);g.fillStyle="#d33";g.fillRect(560,110,24,14);g.fillStyle="#5a3a1a";g.fillRect(558,110,3,40)}
+ if(t=="l"){g.fillStyle="#b59a74";g.beginPath();g.moveTo(480,222);g.lineTo(540,130);g.lineTo(556,50);g.lineTo(566,130);g.lineTo(640,222);g.fill()}
+ if(t=="r"||t=="d"){g.fillStyle="#3d8fd1";g.fillRect(0,196,W,40);g.strokeStyle="#9fd0f5";for(let i=0;i<8;i++){const x=(i*95+fr)%W;g.beginPath();g.moveTo(x,205+(i%3)*9);g.lineTo(x+22,205+(i%3)*9);g.stroke()}}
+ const bob=G.run?Math.sin(tr/6)*1.5:0;g.save();g.translate(220,200+bob);g.fillStyle="#8b5a2b";g.fillRect(-40,0,80,22);g.fillStyle="#f6eedb";g.beginPath();g.moveTo(-38,0);g.quadraticCurveTo(0,-62,38,0);g.fill();g.strokeStyle="#c9bda0";g.lineWidth=4;g.stroke();
+ [-24,24].forEach(x=>{g.save();g.translate(x,26);g.rotate(tr/12);g.fillStyle="#5a3a1a";g.beginPath();g.arc(0,0,15,0,7);g.fill();g.fillStyle="#c9a06a";g.beginPath();g.arc(0,0,11,0,7);g.fill();g.strokeStyle="#5a3a1a";for(let i=0;i<4;i++){g.rotate(Math.PI/4);g.beginPath();g.moveTo(-11,0);g.lineTo(11,0);g.stroke()}g.restore()});
+ g.strokeStyle="#5a3a1a";g.lineWidth=8;g.beginPath();g.moveTo(40,16);g.lineTo(110,18);g.stroke();
+ for(let i=0;i<Math.min(2,G.ox);i++){const o=88+i*54;g.fillStyle=i?"#6b4423":"#8a5a30";g.fillRect(o,6,42,20);g.fillRect(o+38,8,16,12);g.fillStyle="#eee";g.fillRect(o+50,6,4,3);g.strokeStyle=g.fillStyle="#3a2412";g.lineWidth=8;for(let j=0;j<4;j++){const x=o+5+j*10,s=G.run?Math.sin(tr/6+j*1.6)*6:0;g.beginPath();g.moveTo(x,26);g.lineTo(x+s,42);g.stroke()}}
+ g.restore();
+ if(w=="snow"||/rain|thunder/.test(w)){const s=w=="snow";g.fillStyle=g.strokeStyle=s?"#fff":"#bcd8f0";g.lineWidth=4;for(let i=0;i<70;i++){const x=(i*53+fr*(s?1:4))%W,y=(i*37+fr*(s?2:14))%H;if(s)g.fillRect(x,y,4,4);else{g.beginPath();g.moveTo(x,y);g.lineTo(x-3,y+9);g.stroke()}}}
+ if(w=="fog"){g.fillStyle="rgba(230,235,240,.45)";g.fillRect(0,0,W,H)}
+ fx2();requestAnimationFrame(draw)}
+/* ===== SOUND ===== */
+let AC,mu=0;
+const tn=(t,f,d,v=.12,ty="square",f2)=>{if(mu)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.state=="suspended"&&AC.resume();const o=AC.createOscillator(),n=AC.createGain(),s=AC.currentTime+t;o.type=ty;o.frequency.setValueAtTime(f,s);f2&&o.frequency.exponentialRampToValueAtTime(f2,s+d);n.gain.setValueAtTime(v,s);n.gain.exponentialRampToValueAtTime(.001,s+d);o.connect(n);n.connect(AC.destination);o.start(s);o.stop(s+d)}catch(e){}},
+ns=(d,v,fq)=>{if(mu||!AC)return;const b=AC.createBuffer(1,Math.floor(AC.sampleRate*d),AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=(Math.random()*2-1)*(1-i/a.length);const s=AC.createBufferSource(),f=AC.createBiquadFilter(),n=AC.createGain();f.type="lowpass";f.frequency.value=fq;n.gain.value=v;s.buffer=b;s.connect(f);f.connect(n);n.connect(AC.destination);s.start()};
+const S={click:()=>tn(0,700,.05,.06),good:()=>[523,659,784,1047].forEach((f,i)=>tn(i*.09,f,.14,.1)),bad:()=>{tn(0,220,.25,.12,"sawtooth",110);tn(.18,165,.35,.12,"sawtooth",80)},alert:()=>{tn(0,880,.1,.08);tn(.12,660,.14,.08)},shot:()=>{tn(0,200,.2,.15,"sawtooth",40);ns(.3,.35,2500)},splash:()=>{tn(0,300,.2,.05,"sine",100);ns(.6,.3,900)},death:()=>[196,185,175,131].forEach((f,i)=>tn(i*.35,f,.5,.12,"triangle")),land:()=>[392,523,659,784].forEach((f,i)=>tn(i*.12,f,.25,.1,"triangle")),win:()=>[523,523,523,659,587,659,784,1047].forEach((f,i)=>tn(i*.16,f,.3,.12)),lose:()=>[392,370,349,330,196].forEach((f,i)=>tn(i*.3,f,.45,.12,"triangle")),clop:j=>{tn(0,j?110:90,.06,.1,"triangle",50);ns(.05,.08,500)},thunder:()=>ns(1.2,.5,300)};
+const shk=()=>{const c=$('c');c.classList.remove('sk');void c.offsetWidth;c.classList.add('sk')};
+let cj=0;setInterval(()=>{if(G&&G.run){S.clop(cj^=1);if(/rain|thunder/.test(G.w))ns(.2,.06,3000)}},150);
+const _hu=hurt;hurt=(p,n,c)=>{if(!p)return;const w=p.x;_hu(p,n,c);if(!w&&p.x){S.death();shk()}};
+const _ev=ev;ev=()=>{S.alert();_ev()};
+const _ld=land;land=l=>{S.land();_ld(l)};
+const _sw=swim;swim=r=>{S.splash();const m=_sw(r);if(/Disaster/.test(m)){setTimeout(S.bad,500);shk()}return m};
+const _dn=done;done=t=>{/lose|lost|Disaster|fail|miss|escape|make off|No |can’t|suffers|swamped|hurt|bitten|poison|swindled|tips|stung/i.test(t)?S.bad():S.good();_dn(t)};
+const _wn=win;win=m=>{const d=P[0].x||!A().length;_wn(m);if(!d)S.win()};
+const _ov=over;over=w=>{_ov(w);S.lose()};
+const _hd=hud;hud=()=>{_hd();$('pg').firstChild.style.width=Math.min(100,G.mi/END*100)+"%"};
+$('ui').addEventListener('click',e=>{if(e.target.tagName=="BUTTON")S.click()});
+$('mu').onclick=()=>{$('mu').blur();mu=!mu;$('mu').textContent=mu?"🔇":"🔊";S.click()};
+document.addEventListener('keydown',e=>{if(e.target.tagName=="INPUT"||HU)return;const b=[...$('ui').querySelectorAll(':scope>button')],sh=$('ui').querySelector('.row'),i=e.key>='1'&&e.key<='9'?+e.key-1:(e.key=="Enter"||e.key==" ")?(sh?b.length-1:0):-1;if(b[i]){e.preventDefault();b[i].click()}});
+const cn=()=>Math.ceil([2.4,1.8,1.3][G.rat]*A().length);
+function lowFood(){const d=Math.floor(G.food/Math.max(1,cn()));ask(`⚠️ The family is nearly out of food: about ${d} day${d==1?"":"s"} left. Hungry travelers weaken fast.`,[["Hunt for game",hunt],["Cut rations ("+RN[Math.min(2,G.rat+1)]+")",()=>{G.rat=Math.min(2,G.rat+1);return "Everyone tightens their belts."}],["Keep going",go]])}
+/* ===== HUNTING MINIGAME ===== */
+let HU=0;
+const HA=[["buffalo",300,70,34,"#5a3a1a",.9],["deer",100,44,22,"#a06a3a",2.4],["rabbit",14,18,10,"#ccc",3.2],["elk",180,56,28,"#8a5a30",1.7],["antelope",80,40,20,"#c08a50",2.8]];
+function hunt(){if(!G.ammo)return ask("You have no ammunition to hunt with.",[["Back",G.ret||go]]);ask("Game is near camp! Hunting takes a day. Click or tap animals to shoot (1 box per shot).",[["Start hunting",hs],["Stay in camp",()=>"You stay in camp."]])}
+function hs(){$('c').style.touchAction="none";HU={t:720,sp:0,l:performance.now(),an:[],f:0,sh:0,mx:null,my:null};$('ui').innerHTML="<p id=hi></p>";hi()}
+function hi(){$('hi').textContent=`🎯 Ammo: ${G.ammo} · Meat: ${HU.f} lb (carry max 200) · Time: ${Math.ceil(HU.t/60)}s`}
+function endH(){const H=HU;HU=0;$('c').style.touchAction="";const f=Math.min(240,Math.round(H.f*hm()));G.food+=f;adv(1);done(f?`You haul back ${f} lb of meat`+(H.f>200?" (all the wagon can carry)":"")+` after ${H.sh} shots.`:"You come back empty-handed. The game got away.")}
+function hdraw(){const H=HU,now=performance.now(),dt=Math.min(3,(now-H.l)/16.7);H.l=now;H.t-=dt;H.sp-=dt;if(H.sp<=0&&H.an.length<4){H.sp=75;const a=pk(HA),d=ch(.5)?1:-1;H.an.push({a,x:d>0?-60:780,y:150+R(70),v:a[5]*d})}
+ H.an=H.an.filter(o=>(o.x+=o.v*dt,o.x>-90&&o.x<810&&!o.dead));
+ H.an.forEach(o=>{const w=o.a[2],h=o.a[3];g.fillStyle=o.a[4];g.fillRect(o.x-w/2,o.y-h,w,h);g.fillRect(o.x+(o.v>0?w/2:-w/2-h/2),o.y-h-h/3,h/2,h/2);g.fillStyle="#2a1a0c";g.fillRect(o.x-w/2+4,o.y,5,7);g.fillRect(o.x+w/2-9,o.y,5,7)});
+ if(H.mx!=null){g.strokeStyle="#f33";g.lineWidth=4;g.beginPath();g.arc(H.mx,H.my,14,0,7);g.moveTo(H.mx-22,H.my);g.lineTo(H.mx+22,H.my);g.moveTo(H.mx,H.my-22);g.lineTo(H.mx,H.my+22);g.stroke()}
+ if(H.t<=0||G.ammo<1)endH()}
+const cpos=e=>{const r=$('c').getBoundingClientRect();return[(e.clientX-r.left)/r.width*720,(e.clientY-r.top)/r.height*260]};
+$('c').addEventListener('pointermove',e=>{if(HU)[HU.mx,HU.my]=cpos(e)});
+$('c').addEventListener('pointerdown',e=>{if(!HU)return;const[x,y]=cpos(e);HU.mx=x;HU.my=y;if(G.ammo<1)return;G.ammo--;HU.sh++;S.shot();const o=HU.an.find(o=>Math.abs(x-o.x)<o.a[2]/2+16&&y<o.y+12&&y>o.y-o.a[3]-20);if(o){o.dead=1;HU.f+=Math.round(o.a[1]*(.8+Math.random()*.4));setTimeout(S.good,120)}hi()});
+/* ===== ATMOSPHERE ===== */
+function fx2(){if(!/rain|thunder|snow|fog/.test(G.w)){g.fillStyle="rgba(255,255,255,.7)";for(let i=0;i<4;i++){const x=((i*230-fr*.4-(G.run?tr*.15:0))%900+900)%900-90,y=25+i*18;g.fillRect(x,y,70,12);g.fillRect(x+14,y-8,40,10)}}
+ const n=(Math.sin(fr/900)+1)/2;g.fillStyle=`rgba(15,15,70,${.28*n})`;g.fillRect(0,0,720,260);
+ if(G.w=="thunderstorm"&&fr%300<3){g.fillStyle="rgba(255,255,255,.6)";g.fillRect(0,0,720,260);if(fr%300==0)S.thunder()}
+ if(HU)hdraw()}
+setInterval(()=>{const p=$('ui').firstChild;if(G.run&&p&&p.tagName=="P"){const q=G.mi<500?["Prairie grass ripples in the wind…","A hawk circles overhead.","Prairie dogs bark from their mounds."]:G.mi<1450?["Dust rises behind the wagon.","You pass bleached buffalo bones.","The oxen plod on, heads low."]:["The air thins as the trail climbs.","Pines crowd the narrow trail.","An eagle screams from the peaks."];p.textContent=pk([...q,`${pk(A()).n} spots ${pk(["a hawk","wildflowers","buffalo tracks","a distant campfire"])}.`,`${pk(A()).n} hums an old hymn.`,`🍖 The family ate ${cn()} lb of food today.`])}},1800);
+/* ===== MORE EVENTS ===== */
+const up=n=>A().forEach(p=>p.h=Math.min(100,p.h+n));
+E.push(
+{w:5,f(){ask("A herd of wild mustangs thunders across the plain.",[["Try to lasso one (1 day)",()=>{adv(1);if(ch(.4)){G.ox++;return "You rope a sturdy mustang to pull the wagon: +1 ox!"}hurt(pk(A()),10,"a bad fall");return "The lasso snaps and someone takes a nasty fall."}],["Watch them run",()=>"A glorious sight."]])}},
+{w:4,f(){ask("A rattlesnake coils in the wagon bed!",[["Shoot it (1 box)",()=>{if(!G.ammo)return "No ammo! It strikes someone.";lose("ammo",1);if(ch(.8))return "Bang! The snake is dead.";sick(pk(A()),"snakebite",10);return "You miss and it bites someone!"}],["Flick it out with a stick",()=>{if(ch(.6))return "It slithers off into the grass.";const p=pk(A());sick(p,"snakebite",10);return p.n+" is bitten!"}]])}},
+{w:4,ok:()=>G.mi>300,f(){ask("Three riders block the trail: “Toll’s $30, friend.”",[["Pay $30",()=>{if(G.money<30){G.money=0;return "You hand over all you have."}G.money-=30;return "They tip their hats and ride off."}],["Stand and fight (2 boxes)",()=>{if(G.ammo<2){lose("food",80);return "No ammo! They loot 80 lb of food."}G.ammo-=2;if(ch(.55))return "A volley sends them running.";hurt(pk(A()),25,"gunshot wounds");return "A gunfight! Someone is hit."}],["Bluff your way past",()=>{if(ch(.4))return "They buy it and step aside.";lose("food",100);return "They don’t. They take 100 lb of food."}]])}},
+{w:4,ok:()=>G.mi<1950,f(){ask("A big wagon train camps nearby and invites you to travel together for a few days.",[["Join them (3 days)",()=>{adv(3);up(15);if(ch(.4))G.med++;return "Hearty meals and fiddle music restore everyone (+15 health)."}],["Press on alone",()=>"You prefer your own company."]])}},
+{w:3,f(){ask("Someone pulls out a fiddle after supper. The camp wants to dance!",[["Dance the night away",()=>{up(10);return "Laughter rings out. Everyone feels better (+10 health)."}],["Get some sleep",()=>"You need your rest."]])}},
+{w:2,f(){ask("You spot a glint of gold flakes in a clear creek.",[["Pan for gold (1 day)",()=>{adv(1);if(ch(.45)){const m=20+R(120);G.money+=m;return `Eureka! You pan $${m} in gold dust.`}return "Nothing but fool’s gold."}],["Keep moving",()=>"There’s no time for dreams."]])}},
+{w:3,ok:()=>G.money>=15,f(){ask("A medicine-show man waves a bottle: “Dr. Pemberton’s Miracle Tonic! Only $15!”",[["Buy a bottle",()=>{G.money-=15;if(ch(.4)){up(20);return "It’s mostly whiskey, but everyone feels great (+20 health)!"}if(ch(.5)){hurt(pk(A()),15,"bad tonic");return "It was poison! Someone is very ill."}return "Just colored water. You’ve been swindled."}],["Wave him off",()=>"He sneers and rolls away."]])}},
+{w:2,ok:()=>G.d.getMonth()>4,f(){ask("A cloud of locusts darkens the sky!",[["Cover the food and wait (1 day)",()=>{adv(1);return "The swarm passes. You lose a day, not your supplies."}],["Ride through it",()=>{lose("food",90);return "They devour 90 lb of food before you break free."}]])}},
+{w:3,ok:()=>G.ox>1,f(){ask("The only waterhole ahead is white with alkali.",[["Let the oxen drink",()=>{if(ch(.5)){lose("ox",1);return "An ox collapses, poisoned."}return "They drink and seem fine."}],["Dig for fresh water (1 day)",()=>{adv(1);return ch(.6)?"You strike clean water!":"Only mud. A lost day."}]])}},
+{w:4,f(){ask("The ruts fade into fog and grass. Which way is the trail?",[["Bear left",()=>{if(ch(.5))return "You find the trail again.";adv(2);return "Wrong turn. You lose two days."}],["Bear right",()=>{if(ch(.5))return "There it is!";adv(2);return "Wrong turn. You lose two days."}],["Send a scout (1 day)",()=>{adv(1);return "The scout finds the way. One day lost."}]])}},
+{w:3,f(){ask("A fresh-dug cache lies under a rock cairn.",[["Open it",()=>{const k=pk(["food","ammo","clothes","parts","med"]),q=k=="food"?80+R(120):1+R(3);G[k]+=q;return `Someone’s loss, your gain: ${q} ${NM[k]}.`}],["Leave it",()=>"Honesty is its own reward."]])}},
+{w:3,f(){ask("A bee tree drips with honey!",[["Smoke the hive out",()=>{if(ch(.7)){G.food+=30;up(5);return "Sweet! +30 lb of food and a happy family."}hurt(pk(A()),10,"bee stings");return "The bees swarm! Someone is badly stung."}],["Leave the bees alone",()=>"A wise choice."]])}},
+{w:3,f(){ask("The trail tilts sharply and the wagon starts to tip!",[["Everyone push the high side",()=>{if(ch(.6))return "It rights itself with a groan.";lose("food",60);hurt(pk(A()),12,"a crushed foot");return "It tips! Supplies spill and someone is hurt."}],["Unload and re-pack (1 day)",()=>{adv(1);return "Safe, but you lose a day."}]])}},
+{w:2,f(){ask("A meteor shower streaks across the night sky.",[["Stay up and watch",()=>{up(5);return "A wonder you’ll never forget (+5 health)."}],["Sleep through it",()=>"You miss the show."]])}}
+);
+
+intro();draw();
+</script><script>/* ===== MOD: LONGER, HARDER, MORE PEOPLE ===== */
+Object.assign(PR,{food:13,ammo:6,clothes:14,parts:20,med:13,ox:45});
+LM.forEach(l=>l[1]=Math.round(l[1]*1.3));
+LM.push(["Wakarusa Creek",55,"r"],["Alcove Spring",190,"h"],["Little Blue River",300,"r"],["Platte River Crossing",470,"r"],["Ash Hollow",560,"l"],["Courthouse Rock",650,"l"],["Scotts Bluff",770,"l"],["Deer Creek Station",950,"f"],["Devil’s Gate",1120,"l"],["Sweetwater River",1160,"r"],["Pacific Springs",1250,"h"],["Green River",1390,"r"],["Bear River",1450,"r"],["Hot Springs Camp",1580,"h"],["American Falls",1780,"l"],["Salmon Falls",1840,"l"],["Three Island Crossing",1940,"r"],["Burnt River Canyon",2060,"p"],["Flagstaff Hill",2110,"l"],["Grande Ronde Valley",2190,"h"],["Whitman Mission",2230,"f"],["Umatilla Rapids",2310,"r"],["Laurel Hill",2420,"p"],["Tollgate Pass",2500,"p"],["Foster’s Farm",2570,"f"]);
+LM.sort((a,b)=>a[1]-b[1]);
+DIS.push(["typhus",12],["pneumonia",11],["smallpox",14],["gangrene",13],["blood poisoning",12],["a concussion",9],["rabies",15],["malaria",8]);
+const _sk=sick;sick=(p,d,s)=>{_sk(p,d,Math.ceil(s*1.25));if(p)p.t+=2};
+const _h2=hurt;hurt=(p,n,c)=>_h2(p,p&&p.r=="tough"?Math.ceil(n*.7):n,c);
+const _s2=swim;swim=r=>_s2(Math.min(94,Math.round(r*1.25)+4));
+/* ---- party skills ---- */
+const RO={none:["Hand","no special skill"],hunter:["Hunter","+40% meat from hunts"],doctor:["Doctor","heals everyone daily"],cook:["Cook","stretches food ~17%"],scout:["Scout","+2 miles a day"],smith:["Wheelwright","forges spare parts"],preacher:["Preacher","sermons lift morale"],trader:["Trader","15% off store prices"],finder:["Scavenger","finds loot on the trail"],tough:["Brawler","takes 30% less damage"]};
+const RK=Object.keys(RO),rl=k=>A().some(p=>p.r==k),hm=()=>rl("hunter")?1.4:1,rp=()=>pk(A());
+const NMS=["Abel","Ruth","Gideon","Nell","Silas","Dora","Cyrus","Opal","Ezra","Maud","Hiram","Ida","Wade","Pearl"];
+const hire=()=>{const n=pk(NMS),r=pk(RK.slice(1));P.push({n,h:90,ill:0,sv:0,t:0,r});return n+" signs on as your "+RO[r][0]+" ("+RO[r][1]+")."};
+function crew(next){const u=$('ui');u.innerHTML="<p><b>Your party.</b> Tap a companion to change their skill. Skills shape how you survive.</p>";
+ P.slice(1).forEach(p=>{const b=document.createElement('button'),f=()=>b.textContent=p.n+": "+RO[p.r||"none"][0]+" – "+RO[p.r||"none"][1]+" ›";f();b.onclick=()=>{p.r=RK[(RK.indexOf(p.r||"none")+1)%RK.length];f()};u.appendChild(b)});
+ const s=document.createElement('button');s.textContent="Set out";s.onclick=next;u.appendChild(s)}
+const _pk=pick;pick=(m,x)=>{_pk(m,x);const u=$('ui'),tx=u.querySelector('p').innerHTML,bs=[...u.querySelectorAll('button')].map(b=>[b.textContent,b.onclick]);P.slice(1).forEach((p,i)=>p.r=RK[[1,2,4,5,3,6,7,8][i]]);crew(()=>ask(tx,bs))};
+const _sh=shop;shop=(m,a)=>_sh(m*(rl("trader")?.85:1),a);
+const _dy=day;day=rest=>{const a0=A().length;_dy(rest);if(!a0)return;
+ if(rl("doctor")){up(1);A().forEach(p=>{if(p.ill&&ch(.15))p.t--})}
+ if(rl("cook"))G.food+=Math.floor(A().length*.4);
+ if(rl("scout")&&!rest)G.mi+=2;
+ if(rl("smith")&&G.parts<2&&ch(.04)){G.parts++;G.log.push("Your wheelwright forges a spare part.")}
+ if(rl("preacher")&&ch(.06)){up(4);G.log.push("The preacher’s sermon lifts everyone’s spirits.")}
+ if(rl("finder")&&ch(.05)){G.food+=20+R(30);G.log.push("Your scavenger turns up some food.")}
+ if(!rest&&G.pace==2&&G.ox>2&&ch(.025)){lose("ox",1);G.log.push("An ox drops dead from the grueling pace.")}
+ if(G.T>88&&G.food>50&&ch(.1)){const q=Math.ceil(G.food*.03);lose("food",q);G.log.push("Heat spoils "+q+" lb of food.")}};
+/* ---- checkpoint actions ---- */
+const once=(k,f)=>()=>{if(G.us[k])return "You’ve already done that here.";G.us[k]=1;return f()};
+const cpAct=l=>{const t=l[2],o=[];
+ if(t=="f")o.push(["Hire a hand ($45)",()=>{if(G.money<45)return "You can’t afford a hand.";if(A().length>8)return "The wagon can’t carry another soul.";G.money-=45;return hire()}],["Work odd jobs (2 days)",()=>{adv(2);const m=15+R(30);G.money+=m;return "Honest wages: +$"+m+"."}],["See the post surgeon ($18)",()=>{if(G.money<18)return "Not enough money.";G.money-=18;A().forEach(p=>{if(p.ill&&ch(.7)){p.ill=0;p.sv=0}});up(25);return "The surgeon patches everyone up (+25 health)."}],["Buy a rumor ($5)",()=>{if(G.money<5)return "No coin, no rumor.";G.money-=5;if(ch(.5)){G.mi+=25;return "A hostler sketches a shortcut: +25 miles."}adv(1);return "The rumor was nonsense. You lose a day."}]);
+ if(t=="l")o.push(["Carve your name in the rock (1 day)",()=>{adv(1);up(8);return "Your name joins thousands of others (+8 health)."}],["Climb to survey the road (1 day)",()=>{adv(1);if(ch(.55)){G.mi+=15;return "You spot an easier line: +15 miles."}hurt(rp(),14,"a fall");return "A foothold gives way. Someone is hurt."}],["Trade stories with travelers",()=>{if(ch(.5)){G.med++;return "A woman shares herbs: +1 medicine."}lose("food",20);return "Hungry strangers join your supper: -20 lb food."}]);
+ if(t=="h")o.push(["Soak in the hot spring (1 day)",()=>{adv(1);up(25);return "Aches melt away (+25 health)."}],["Hunt waterfowl (1 box)",()=>{if(!G.ammo)return "No ammo.";lose("ammo",1);adv(1);if(ch(.7)){G.food+=40;return "Ducks for supper: +40 lb food."}return "You miss."}]);
+ if(t=="p")o.push(["Double-team the grade (1 day)",()=>{adv(1);if(ch(.6)){G.mi+=12;return "The teams strain up the grade: +12 miles."}lose("ox",1);return "An ox goes down on the steep grade."}],["Lower the wagon with ropes (2 days)",()=>{adv(2);if(ch(.25)){lose("food",70);hurt(rp(),14,"a rope burn");return "The load slips: -70 lb food and a bad rope burn."}return "Slow, careful work pays off."}]);
+ return o.map(([s,f])=>[s,once(s,f),1])};
+const _mn=menu;menu=x=>{x=x||[];if(G.cp&&!x.some(e=>e[2]))x=[...x,...cpAct(G.cp)];_mn(x)};
+const _l2=land;land=l=>{G.cp=l;G.us={};_l2(l)};
+const _g2=go;go=()=>{G.cp=0;_g2()};
+/* ---- CLI trail log ---- */
+document.head.insertAdjacentHTML('beforeend','<style>#cli{background:#0b140b;color:#6dff6d;border:4px solid var(--bd);box-shadow:4px 4px 0 var(--bd);padding:6px 10px;margin-top:10px;font-size:17px;height:7.8em;overflow:auto}#cli i{color:#3f9a3f;font-style:normal}#cli div:last-child{color:#d6ffd6}#cli:empty{display:none}#cli::after{content:"█";animation:bl 1s steps(1) infinite}@keyframes bl{50%{opacity:0}}</style>');
+$('hud').insertAdjacentHTML('afterend','<div id="cli" role="log"></div>');
+const CL=[],cl=t=>{t=t.replace(/<[^>]+>/g," ").replace(/[<>&]/g,"").trim();if(!t||/^(The wagon is stopped|The wagon rolls|THE OREGON|When do you)/.test(t)||CL.length&&CL[CL.length-1].t==t)return;CL.push({t,d:fd()});if(CL.length>60)CL.shift();const c=$('cli');c.innerHTML=CL.slice(-8).map(e=>"<div><i>["+e.d+"]</i> &gt; "+e.t+"</div>").join("");c.scrollTop=1e5};
+const _ak=ask;ask=(t,o)=>{if(G){if(G.log.length)cl(G.log.join(" "));cl(t)}_ak(t,o)};
+/* ---- 8-bit scenery ---- */
+const _fx=fx2;fx2=()=>{_fx();const t=G.at,m=G.mi,f=fr;
+ if(t=="h"){g.fillStyle="#5ac8d8";g.fillRect(470,214,170,14);g.fillStyle="rgba(255,255,255,.7)";for(let i=0;i<6;i++)g.fillRect(490+i*24,196-((f+i*17)%40),8,8)}
+ if(t=="p"){g.fillStyle="#8a8a96";g.beginPath();g.moveTo(420,222);g.lineTo(520,70);g.lineTo(600,130);g.lineTo(660,222);g.fill();g.fillStyle="#fff";g.beginPath();g.moveTo(498,104);g.lineTo(520,70);g.lineTo(546,108);g.fill()}
+ if(m>1900&&m<2500){g.fillStyle="#1f5a34";for(let i=0;i<9;i++){const x=((i*83-tr*1.1)%760+760)%760-20;g.fillRect(x,150,6,24);g.beginPath();g.moveTo(x-12,160);g.lineTo(x+3,120);g.lineTo(x+18,160);g.fill()}}
+ else if(m>1200&&m<1900){g.fillStyle="#7a5a30";const x=(((f*2-tr)%800)+800)%800-40;g.beginPath();g.arc(x,236,10+((f>>3)&1),0,7);g.fill()}
+ else if(m<650&&!t){g.fillStyle="#3a2a18";for(let i=0;i<3;i++){const x=((i*300+90-tr*.5)%900+900)%900-60;g.fillRect(x,168,22,10);g.fillRect(x+16,164,8,8)}}};
+/* ---- CUSTOM PARTY SETUP ---- */
+const psz=()=>Math.max(0,Math.min(8,(+$('sz').value||1)-1));
+intro=()=>{newG();ask(`<b>THE OREGON TRAIL — 1848</b><br>You will lead a party 2,600 miles from Independence, Missouri to Oregon’s Willamette Valley. Name your wagon leader, choose how many people travel with you, and name each companion (leave a name blank for a random one). Others may join along the way, and every extra mouth eats.<br><label for="nm">Wagon leader</label><br><input id="nm" value="Josiah" maxlength="14"><br><label for="sz">Party size, including you (1–9)</label><br><input id="sz" type="number" min="1" max="9" value="5" style="width:76px"><div id="nf"></div>Choose a trade (poorer trades score higher):`,[["Banker — $1,100 (×1)",()=>pick(1100,1)],["Carpenter — $550 (×2)",()=>pick(550,2)],["Farmer — $280 (×3)",()=>pick(280,3)]]);
+ const nf=()=>{const b=$('nf'),old=[...b.querySelectorAll('input')].map(i=>i.value);b.innerHTML="";for(let i=1;i<=psz();i++){b.insertAdjacentHTML('beforeend',`<label for="comp${i}">Companion ${i}</label><br><input id="comp${i}" placeholder="Random name" maxlength="14"><br>`);$('comp'+i).value=old[i-1]||""}};
+ $('sz').oninput=nf;nf()};
+intro();
+/* ---- NEW RANDOM EVENTS ---- */
+const X=(w,ok,gen)=>E.push({w,ok,f(){const[t,o]=gen();ask(t,o)}});
+X(4,0,()=>["Your wagon wheel sinks into a patch of quicksand!",[["Unload everything and pull (1 day)",()=>{adv(1);if(ch(.7))return "It comes free, filthy but intact.";lose("food",60);return "It frees, but sacks are lost in the muck: -60 lb food."}],["Hitch every ox and heave",()=>{if(ch(.5))return "It lurches out!";lose("ox",1);return "The strain kills an ox."}]]]);
+X(4,()=>G.ox>1,()=>["Thunder spooks the oxen at night and they bolt!",[["Chase them down (1 day)",()=>{adv(1);const n=R(3);lose("ox",n);return n?`You recover the herd, but ${n} ${n>1?"oxen are":"ox is"} lost.`:"You round up every last ox."}],["Wait for dawn",()=>{const n=1+R(2);lose("ox",n);return `At dawn ${n} ${n>1?"oxen are":"ox is"} gone for good.`}]]]);
+X(3,0,()=>["A grizzly rummages through the supply wagon!",[["Fire from the wagon (2 boxes)",()=>{if(G.ammo<2){lose("food",90);return "No ammo! It rips open the food sacks: -90 lb."}lose("ammo",2);if(ch(.5)){G.food+=60;return "A lucky shot! You butcher it: +60 lb of meat."}hurt(rp(),28,"a mauling");return "You wound it, and it mauls someone."}],["Bang pots and shout",()=>{if(ch(.5))return "It lumbers off.";lose("food",70);return "It eats its fill: -70 lb food."}]]]);
+X(3,()=>G.ox>2,()=>["Horse thieves cut loose part of your team at night!",[["Give chase (1 box)",()=>{adv(1);lose("ammo",1);if(ch(.5))return "You catch them and recover the team.";lose("ox",2);return "They vanish with 2 oxen."}],["Let them go",()=>{lose("ox",1);return "You lose 1 ox but keep your skin."}]]]);
+X(3,()=>G.mi>700,()=>["A rockslide blocks the narrow trail ahead!",[["Clear it by hand (2 days)",()=>{adv(2);if(ch(.3))hurt(rp(),15,"a crushed hand");return "Back-breaking work, but the trail opens."}],["Find a detour (1 day)",()=>{adv(1);if(ch(.5))return "A game trail loops around it.";G.mi=Math.max(0,G.mi-15);return "Dead end! You backtrack 15 miles."}]]]);
+X(3,()=>A().length>2,()=>{const a=rp(),b=pk(A().filter(p=>p!=a));return[`${a.n} and ${b.n} are at each other’s throats over the water ration.`,[["Break it up and make them shake hands",()=>{if(ch(.6))return "Cooler heads prevail.";hurt(a,8,"a fistfight");return "Fists fly before you separate them."}],["Let them settle it",()=>{hurt(a,10,"a brawl");hurt(b,10,"a brawl");return "They brawl until both are bloodied."}],["Dock their rations",()=>{hurt(a,6,"hunger");hurt(b,6,"hunger");return "Sullen silence follows."}]]]});
+X(2,()=>A().length>2&&G.mi>400,()=>{const p=pk(A().slice(1)),lv=()=>{p.n+=" (left)";p.x=1};return[`${p.n} is packing a bundle: “I’m done. I’m turning back.”`,[["Beg them to stay ($20)",()=>{if(G.money<20||ch(.4)){lv();return "They walk off into the dark."}G.money-=20;return p.n+" stays, grudgingly."}],["Let them go with a share (-40 lb food)",()=>{lose("food",40);lv();return "They leave. The wagon feels emptier."}],["Order them to stay",()=>{if(ch(.5))return p.n+" sulks, but stays.";lv();return "They slip away at dawn."}]]]});
+X(3,0,()=>["Smoke rises from a camp of travelers; the sign reads “Smallpox.”",[["Detour wide around it (2 days)",()=>{adv(2);return "You give the camp a wide berth."}],["Pass quickly with cloths over faces",()=>{if(ch(.75))return "You pass unharmed.";sick(rp(),"smallpox",14);return "Days later someone breaks out in sores."}]]]);
+X(4,0,()=>["Dead birds litter the edge of the only spring for miles.",[["Boil the water first (1 day)",()=>{adv(1);if(ch(.8))return "Boiled and safe.";sick(rp(),"dysentery",9);return "Someone sips early and falls ill."}],["Drink and hope",()=>{if(ch(.5))return "It tastes foul but does no harm.";A().forEach(p=>{if(ch(.4))sick(p,"dysentery",9)});return "Cramps rack the party. Several fall ill."}],["Go dry to the next water",()=>{hurt(rp(),12,"thirst");if(G.ox>1&&ch(.3))lose("ox",1);return "A parched, miserable march."}]]]);
+X(3,0,()=>["Hail the size of eggs hammers the wagon cover!",[["Shelter under the wagon (1 day)",()=>{adv(1);hurt(rp(),10,"hail");return "You wait it out, bruised."}],["Drive on to find cover",()=>{lose("clothes",1);hurt(rp(),18,"hail");return "The canvas shreds and someone is battered: -1 clothes."}]]]);
+X(4,()=>G.T<40,()=>["A brutal frost settles in overnight.",[["Huddle together by the fire",()=>{hurt(rp(),8,"the cold");return "A long, cold night."}],["Burn spare wagon parts for heat",()=>{if(G.parts){G.parts--;return "You burn a spare part. Warm, but costly."}hurt(rp(),12,"frostbite");return "Nothing to burn. Frostbite sets in."}]]]);
+X(3,()=>G.mi>1950,()=>["A deep crack echoes above: snow slides down the mountain toward the trail!",[["Run for the trees",()=>{if(ch(.55))return "You make the trees as the slope thunders by.";const p=rp();hurt(p,100,"an avalanche");return p.n+" is buried."}],["Back the wagon up",()=>{adv(1);if(ch(.4))lose("ox",1);return "You retreat in time, but lose a day."}]]]);
+X(3,()=>G.mi>500&&G.mi<2000,()=>["A cavalry patrol offers to escort you through dangerous country for $25.",[["Pay for the escort",()=>{if(G.money<25)return "You can’t afford it.";G.money-=25;G.mi+=25;return "A fast, safe march: +25 miles."}],["Decline",()=>{if(ch(.2)){lose("food",90);return "Raiders hit you later and take 90 lb of food."}return "You go it alone, unharmed."}]]]);
+X(3,0,()=>["A stranger sells a “shortcut map” for $12.",[["Buy it",()=>{if(G.money<12)return "No money.";G.money-=12;if(ch(.5)){G.mi+=35;return "The map is true: +35 miles."}adv(3);return "The map was a forgery. You lose 3 days."}],["Pass",()=>"You trust your own eyes."]]]);
+X(2,()=>A().length>1,()=>["A wagon train hosts a wedding and invites you to the feast.",[["Attend (1 day)",()=>{adv(1);up(14);G.food+=30;return "Music, pie and dancing: +14 health, +30 lb food."}],["Politely excuse yourself",()=>"The miles wait for no one."]]]);
+X(2,0,()=>["Word spreads of a gold strike far off the trail.",[["Detour to the strike (3 days)",()=>{adv(3);if(ch(.25)){const m=80+R(150);G.money+=m;return `A real find: +$${m}.`}return "Only claim jumpers and mud."}],["Stick to the trail",()=>"Fool’s gold has ruined many an emigrant."]]]);
+X(3,()=>G.d.getMonth()>3&&G.d.getMonth()<8,()=>["A cloud of mosquitoes rises from the river bottoms at dusk.",[["Smudge fires all night (1 day)",()=>{adv(1);return "Smoke keeps them off, but nobody sleeps."}],["Endure it",()=>{const n=R(3);for(let i=0;i<n;i++)sick(rp(),"malaria",8);return n?"Fever follows. "+n+" fall ill.":"Itchy but unharmed."}]]]);
+X(3,()=>G.T<35,()=>["The glare off the snow stabs your eyes.",[["Cover your eyes and rest (1 day)",()=>{adv(1);return "The pain fades."}],["Squint and push on",()=>{hurt(rp(),12,"snow blindness");return "Someone stumbles half-blind for miles."}]]]);
+X(3,0,()=>["Cholera is spreading along the river and the water is suspect.",[["Dose everyone (2 medicine)",()=>{if(G.med<2){A().forEach(p=>{if(ch(.3))sick(p,"cholera",12)});return "Not enough medicine. Several fall ill."}lose("med",2);return "Your doses hold the sickness at bay."}],["Move camp upwind (2 days)",()=>{adv(2);if(ch(.4))sick(rp(),"cholera",12);return "You move upwind and watch carefully."}]]]);
+X(4,()=>G.mi>1200&&G.mi<1950,()=>["Forty miles of dry country lie ahead with no water.",[["Travel by night (1 day)",()=>{adv(1);hurt(rp(),8,"exhaustion");return "Cool but exhausting."}],["Push straight through",()=>{A().forEach(p=>hurt(p,6,"thirst"));if(ch(.3))lose("ox",1);return "Everyone suffers the dry march."}]]]);
+X(5,()=>G.mi>2350,()=>["Sleet and a quagmire of mud choke the Cascade road.",[["Double-team the grade (1 day)",()=>{adv(1);if(ch(.4)){lose("ox",1);return "An ox founders in the mud."}return "The wagon crawls through."}],["Wait for the weather (2 days)",()=>{adv(2);hurt(rp(),10,"exposure");return "Cold, wet days in the pines."}]]]);
+</script></body></html>
